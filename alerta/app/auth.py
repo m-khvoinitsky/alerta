@@ -63,7 +63,7 @@ def verify_api_key(key, method):
     return key_info
 
 
-def create_token(user, name, login, provider=None, customer=None, role='user'):
+def create_token(user, name, login, provider=None, customer=None, role='user', attrs=None):
     payload = {
         'iss': request.url_root,
         'sub': user,
@@ -84,6 +84,9 @@ def create_token(user, name, login, provider=None, customer=None, role='user'):
     if provider == 'basic':
         payload['email_verified'] = db.is_email_verified(login)
 
+    if attrs:
+        payload['attrs'] = attrs
+
     token = jwt.encode(payload, key=app.config['SECRET_KEY'])
     return token.decode('unicode_escape')
 
@@ -99,29 +102,15 @@ def authenticate(message, status_code=401):
 def auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-
-        key = request.args.get('api-key', None)
-        if key:
-            try:
-                ki = verify_api_key(key, request.method)
-            except AuthError as e:
-                return authenticate(str(e), 401)
-            except Forbidden as e:
-                return authenticate(str(e), 403)
-            except Exception as e:
-                return authenticate(str(e), 500)
-            g.user = ki['user']
-            g.customer = ki.get('customer', None)
-            g.role = role(ki['user'])
-            return f(*args, **kwargs)
-
         auth_header = request.headers.get('Authorization', '')
+        api_key = request.args.get('api-key', None)
+        api_key_matchobject = re.match('Key (\S+)', auth_header)
+        if api_key_matchobject:
+            api_key = api_key_matchobject.group(1)
 
-        m = re.match('Key (\S+)', auth_header)
-        if m:
-            key = m.group(1)
+        if api_key:
             try:
-                ki = verify_api_key(key, request.method)
+                ki = verify_api_key(api_key, request.method)
             except AuthError as e:
                 return authenticate(str(e), 401)
             except Forbidden as e:
@@ -131,6 +120,7 @@ def auth_required(f):
             g.user = ki['user']
             g.customer = ki.get('customer', None)
             g.role = role(ki['user'])
+            g.attrs = ki.get('attrs', None)
             return f(*args, **kwargs)
 
         m = re.match('Bearer (\S+)', auth_header)
@@ -147,6 +137,7 @@ def auth_required(f):
             g.user = payload['login']
             g.customer = payload.get('customer', None)
             g.role = payload.get('role', None)
+            g.attrs = payload.get('attrs', None)
             return f(*args, **kwargs)
 
         if not app.config['AUTH_REQUIRED']:
@@ -410,7 +401,8 @@ def saml_response_from_idp():
     else:
         customer = None
 
-    token = create_token(email, name, email, provider='saml2', customer=customer, role=role(email))
+    identity['provider'] = 'saml2'
+    token = create_token(email, name, email, provider='saml2', customer=customer, role=role(email), attrs=identity)
     return _make_response({'status': 'ok', 'token': token}, 200)
 
 

@@ -1424,7 +1424,7 @@ class Database(object):
         else:
             return None
 
-    def create_key(self, user, type='read-only', customer=None, text=None):
+    def create_key(self, user, type='read-only', customer=None, text=None, attrs=None):
 
         try:
             random = str(os.urandom(32)).encode('utf-8')  # python 3
@@ -1443,6 +1443,9 @@ class Database(object):
             "lastUsedTime": None,
             "customer": customer
         }
+
+        if attrs:
+            data['attrs'] = attrs
 
         if self.db.keys.insert_one(data.copy()):
             return data

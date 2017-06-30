@@ -1030,7 +1030,7 @@ def create_key():
 
     text = request.json.get("text", "API Key for %s" % user)
     try:
-        key = db.create_key(user, type, customer, text)
+        key = db.create_key(user, type, customer, text, attrs=g.get('attrs', None))
     except Exception as e:
         return jsonify(status="error", message=str(e)), 500
 
